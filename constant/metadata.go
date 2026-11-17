@@ -213,8 +213,10 @@ type Metadata struct {
 	RemoteDst    string     `json:"remoteDestination"`
 	DSCP         uint8      `json:"dscp"`
 
-	RawSrcAddr net.Addr `json:"-"`
-	RawDstAddr net.Addr `json:"-"`
+	// AtomFakeIP tracks the original synthetic destination for proxy UDP.
+	AtomFakeIP netip.Addr `json:"-"`
+	RawSrcAddr net.Addr   `json:"-"`
+	RawDstAddr net.Addr   `json:"-"`
 	// Only domain rule
 	SniffHost string `json:"sniffHost"`
 }
