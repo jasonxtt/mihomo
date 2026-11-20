@@ -2,6 +2,9 @@ package adapter
 
 import (
 	"fmt"
+	"maps"
+	"strings"
+	"time"
 
 	"github.com/metacubex/mihomo/adapter/outbound"
 	"github.com/metacubex/mihomo/common/structure"
@@ -106,6 +109,20 @@ func ParseProxy(mapping map[string]any, options ...ProxyOption) (C.Proxy, error)
 		proxy, err = outbound.NewWireGuard(*wgOption)
 	case "tuic":
 		tuicOption := &outbound.TuicOption{BasicOption: basicOption}
+		if value, ok := mapping["heartbeat-interval"].(string); ok {
+			if interval, ok := strings.CutPrefix(value, "tuic:"); ok {
+				period, parseErr := time.ParseDuration(interval)
+				if parseErr != nil || period < 0 {
+					return nil, fmt.Errorf("invalid TUIC heartbeat duration %q", interval)
+				}
+				if period == 0 {
+					period = 10 * time.Second
+				}
+				tuicOption.ProtocolHeartbeat = period
+				mapping = maps.Clone(mapping)
+				delete(mapping, "heartbeat-interval")
+			}
+		}
 		err = decoder.Decode(mapping, tuicOption)
 		if err != nil {
 			break

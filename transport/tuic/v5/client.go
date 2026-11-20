@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"runtime"
 	"sync"
@@ -29,6 +30,7 @@ type ClientOption struct {
 	UdpRelayMode          types.UdpRelayMode
 	MaxUdpRelayPacketSize int
 	MaxOpenStreams        int64
+	Heartbeat             time.Duration
 }
 
 type clientImpl struct {
@@ -86,7 +88,29 @@ func (t *clientImpl) getQuicConn(ctx context.Context) (*quic.Conn, error) {
 
 	t.quicConn = quicConn
 	t.openStreams.Store(0)
+	if t.Heartbeat > 0 {
+		go t.sendHeartbeats(quicConn)
+	}
 	return quicConn, nil
+}
+
+func (t *clientImpl) sendHeartbeats(conn *quic.Conn) {
+	ticker := time.NewTicker(t.Heartbeat)
+	defer ticker.Stop()
+	packet := []byte{VER, byte(HeartbeatType)}
+	for {
+		select {
+		case <-conn.Context().Done():
+			return
+		case <-ticker.C:
+			if err := conn.SendDatagram(packet); err != nil {
+				if conn.Context().Err() == nil {
+					t.forceClose(conn, fmt.Errorf("send TUIC heartbeat: %w", err))
+				}
+				return
+			}
+		}
+	}
 }
 
 func (t *clientImpl) sendAuthentication(quicConn *quic.Conn) (err error) {

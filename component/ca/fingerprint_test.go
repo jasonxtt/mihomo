@@ -1,7 +1,9 @@
 package ca
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"testing"
 	"time"
@@ -9,6 +11,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFingerprintVerifierPublicKey(t *testing.T) {
+	encodePin := func(cert *x509.Certificate) string {
+		key, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+		require.NoError(t, err)
+		pin := sha256.Sum256(key)
+		return base64.StdEncoding.EncodeToString(pin[:])
+	}
+	verifier, err := NewFingerprintVerifier(publicKeyPinPrefix+encodePin(rootCert)+","+encodePin(leafCert), nil)
+	require.NoError(t, err)
+	require.NoError(t, verifier([]*x509.Certificate{leafCert, rootCert}, leafServerName))
+	require.Error(t, verifier([]*x509.Certificate{intermediateCert, rootCert}, leafServerName), "only the leaf can match")
+	require.Error(t, verifier(nil, leafServerName))
+
+	reissued := *leafCert
+	reissued.Raw = []byte("different DER, same public key")
+	require.NoError(t, verifier([]*x509.Certificate{&reissued}, leafServerName))
+	_, err = NewFingerprintVerifier(publicKeyPinPrefix+"dGVzdA==", nil)
+	require.Error(t, err)
+}
 
 func TestFingerprintVerifierLeaf(t *testing.T) {
 	leafFingerprint := CalculateFingerprint(leafCert.Raw)

@@ -33,21 +33,22 @@ type Tuic struct {
 
 type TuicOption struct {
 	BasicOption
-	Name                  string   `proxy:"name"`
-	Server                string   `proxy:"server"`
-	Port                  int      `proxy:"port"`
-	Token                 string   `proxy:"token,omitempty"`
-	UUID                  string   `proxy:"uuid,omitempty"`
-	Password              string   `proxy:"password,omitempty"`
-	Ip                    string   `proxy:"ip,omitempty"`
-	HeartbeatInterval     int      `proxy:"heartbeat-interval,omitempty"`
-	ALPN                  []string `proxy:"alpn,omitempty"`
-	ReduceRtt             bool     `proxy:"reduce-rtt,omitempty"`
-	RequestTimeout        int      `proxy:"request-timeout,omitempty"`
-	UdpRelayMode          string   `proxy:"udp-relay-mode,omitempty"`
-	CongestionController  string   `proxy:"congestion-controller,omitempty"`
-	DisableSni            bool     `proxy:"disable-sni,omitempty"`
-	MaxUdpRelayPacketSize int      `proxy:"max-udp-relay-packet-size,omitempty"`
+	Name                  string        `proxy:"name"`
+	Server                string        `proxy:"server"`
+	Port                  int           `proxy:"port"`
+	Token                 string        `proxy:"token,omitempty"`
+	UUID                  string        `proxy:"uuid,omitempty"`
+	Password              string        `proxy:"password,omitempty"`
+	Ip                    string        `proxy:"ip,omitempty"`
+	HeartbeatInterval     int           `proxy:"heartbeat-interval,omitempty"`
+	ProtocolHeartbeat     time.Duration `proxy:"-"`
+	ALPN                  []string      `proxy:"alpn,omitempty"`
+	ReduceRtt             bool          `proxy:"reduce-rtt,omitempty"`
+	RequestTimeout        int           `proxy:"request-timeout,omitempty"`
+	UdpRelayMode          string        `proxy:"udp-relay-mode,omitempty"`
+	CongestionController  string        `proxy:"congestion-controller,omitempty"`
+	DisableSni            bool          `proxy:"disable-sni,omitempty"`
+	MaxUdpRelayPacketSize int           `proxy:"max-udp-relay-packet-size,omitempty"`
 
 	FastOpen             bool       `proxy:"fast-open,omitempty"`
 	MaxOpenStreams       int        `proxy:"max-open-streams,omitempty"`
@@ -158,7 +159,13 @@ func NewTuic(option TuicOption) (*Tuic, error) {
 		option.RequestTimeout = 8000
 	}
 
-	if option.HeartbeatInterval <= 0 {
+	if option.ProtocolHeartbeat > 0 {
+		if len(option.Token) > 0 {
+			return nil, fmt.Errorf("protocol heartbeat is only supported for TUIC v5")
+		}
+		// The protocol heartbeat replaces QUIC PINGs for this configuration.
+		option.HeartbeatInterval = 0
+	} else if option.HeartbeatInterval <= 0 {
 		option.HeartbeatInterval = 10000
 	}
 
@@ -291,6 +298,7 @@ func NewTuic(option TuicOption) (*Tuic, error) {
 			UdpRelayMode:          udpRelayMode,
 			MaxUdpRelayPacketSize: maxUdpRelayPacketSize,
 			MaxOpenStreams:        clientMaxOpenStreams,
+			Heartbeat:             option.ProtocolHeartbeat,
 		}
 
 		t.client = tuic.NewPoolClientV5(clientOption, t.dial)
